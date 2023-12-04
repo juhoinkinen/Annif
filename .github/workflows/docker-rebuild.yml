@@ -25,7 +25,7 @@ jobs:
         password: ${{ secrets.YHTEENTOIMIVUUSPALVELUT_QUAY_IO_PASSWORD }}
     - name: Docker meta
       id: meta
-      uses: docker/metadata-action@2c0bd771b40637d97bf205cbccdd294a32112176  # v4.5.0
+      uses: docker/metadata-action@31cebacef4805868f9ce9a0cb03ee36c32df2ac4  # v5.3.0
       with:
         images: quay.io/natlibfi/annif
         flavor: |
