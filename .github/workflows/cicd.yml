@@ -148,7 +148,7 @@ jobs:
         password: ${{ secrets.YHTEENTOIMIVUUSPALVELUT_QUAY_IO_PASSWORD }}
     - name: Docker meta
       id: meta
-      uses: docker/metadata-action@57396166ad8aefe6098280995947635806a0e6ea  # v4.1.1
+      uses: docker/metadata-action@dbef88086f6cef02e264edb7dbf63250c17cef6c  # v5.5.0
       with:
         images: quay.io/natlibfi/annif
         tags: |
@@ -187,7 +187,7 @@ jobs:
         password: ${{ secrets.YHTEENTOIMIVUUSPALVELUT_QUAY_IO_PASSWORD }}
     - name: Docker meta
       id: meta
-      uses: docker/metadata-action@57396166ad8aefe6098280995947635806a0e6ea  # v4.1.1
+      uses: docker/metadata-action@dbef88086f6cef02e264edb7dbf63250c17cef6c  # v5.5.0
       with:
         images: quay.io/natlibfi/annif
         tags: |
