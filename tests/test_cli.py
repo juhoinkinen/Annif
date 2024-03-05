@@ -10,11 +10,15 @@ import shutil
 from datetime import datetime, timedelta
 from unittest import mock
 
+import huggingface_hub
 from click.shell_completion import ShellComplete
 from click.testing import CliRunner
 
 import annif.cli
+import annif.cli_util
 import annif.parallel
+
+# from annif.exception import OperationFailedException
 
 runner = CliRunner(env={"ANNIF_CONFIG": "annif.default_config.TestingConfig"})
 
@@ -1070,6 +1074,265 @@ def test_routes_with_connexion_app():
     result = os.popen("python annif/cli.py routes").read()
     assert re.search(r"static\s+GET\s+\/static\/<path:filename>", result)
     assert re.search(r"app.home\s+GET\s+\/", result)
+
+
+@mock.patch("huggingface_hub.HfApi.upload_file")
+def test_upload(upload_file):
+    result = runner.invoke(annif.cli.cli, ["upload", "dummy-fi", "dummy-repo"])
+    assert not result.exception
+    assert huggingface_hub.HfApi.upload_file.call_count == 3
+    huggingface_hub.HfApi.upload_file.assert_called_with(
+        path_or_fileobj=mock.ANY,  # io.BytesIO object
+        path_in_repo="dummy-fi.cfg",
+        repo_id="dummy-repo",
+        token=None,
+        commit_message="Upload project(s) dummy-fi with Annif",
+    )
+
+
+@mock.patch("huggingface_hub.HfApi.upload_file")
+def test_upload_many(upload_file):
+    result = runner.invoke(annif.cli.cli, ["upload", "*-fi", "dummy-repo"])
+    assert not result.exception
+    assert huggingface_hub.HfApi.upload_file.call_count == 12
+    huggingface_hub.HfApi.upload_file.assert_called_with(
+        path_or_fileobj=mock.ANY,  # io.BytesIO object
+        path_in_repo="fasttext-fi.cfg",
+        repo_id="dummy-repo",
+        token=None,
+        commit_message="Upload project(s) *-fi with Annif",
+    )
+
+
+def test_upload_nonexistent_repo():
+    failed_result = runner.invoke(annif.cli.cli, ["upload", "dummy-fi", "nonexistent"])
+    assert failed_result.exception
+    assert failed_result.exit_code != 0
+    assert "Repository Not Found for url:" in failed_result.output
+
+
+# def test_write_config(project):
+#     from annif import cli_util
+
+#     cli_util.write_config(project)
+
+
+def hf_hub_download_side_effect(filename, repo_id, token, revision):
+    return "tests/huggingface_cache/" + filename
+
+
+@mock.patch(
+    "huggingface_hub.list_repo_files",
+    return_value=["projects/dummy-fi.zip", "vocabs/dummy.zip", "dummy-fi.cfg"],
+)
+@mock.patch(
+    "huggingface_hub.hf_hub_download",
+    side_effect=hf_hub_download_side_effect,
+)
+def test_download_mocked(
+    hf_hub_download,
+    list_repo_files,
+):
+    result = runner.invoke(
+        annif.cli.cli,
+        [
+            "download",
+            "dummy-fi",
+            "mock-repo",
+        ],
+    )
+    assert not result.exception
+    assert list_repo_files.called
+    assert hf_hub_download.called
+
+
+# @mock_urlopen.return_value.read.side_effect = [b'0123456', b'']
+# @mock.patch.dict(os.environ, {"HF_HOME": "huggingface/cache/"})
+# @mock.patch(
+#     "huggingface_hub.list_repo_files",
+#     return_value=["projects/dummy-fi.zip", "vocabs/dummy.zip", "dummy-fi.cfg"],
+# )
+# @mock.patch(
+#     "huggingface_hub.hf_hub_download",
+#     return_value="projects/dummy-fi.zip",
+# )  # , side_effect="return")
+# def test_download_initial(list_repo_files, hf_hub_download):
+#     result = runner.invoke(
+#         annif.cli.cli,
+#         [
+#             "download",
+#             "dummy-fi",
+#             "mock-repo",
+#         ],
+#     )
+#     # print(result)
+#     assert not result.exception
+#     assert list_repo_files.called
+#     assert hf_hub_download.called
+
+
+# @mock.patch("huggingface_hub.list_repo_files", return_value="return")
+# def test_download2(mock):
+#     result = runner.invoke(
+#         annif.cli.cli,
+#         [
+#             "download",
+#             "dummy-fi",
+#             "dummy-repo",
+#         ],
+#     )
+#     assert not result.exception
+#     assert result.exit_code == 0
+#     assert mock.called
+
+
+# @mock.patch("huggingface_hub.hf_hub_download")
+# def test_download2(mock_hf_hub_download):
+#     result = runner.invoke(annif.cli.cli, ["download", "dummy-fi", "dummy-repo"])
+#     assert not result.exception
+#     assert mock_hf_hub_download.called
+
+
+# def test_download_nonexistent():
+#     # Why the context does not work?
+#     # with pytest.raises(OperationFailedException) as excinfo:
+#     #     runner.invoke(annif.cli.cli, ["download", "dummy-fi", "nonexistent"])
+#     # assert "Repository Not Found for url:" in str(excinfo.value)
+#     failed_result = runner.invoke(
+#         annif.cli.cli, ["download", "dummy-fi", "nonexistent"]
+#     )
+#     assert failed_result.exception
+#     assert failed_result.exit_code != 0
+#     assert "Repository Not Found for url:" in failed_result.output
+
+
+# def test_download_nonexistent2():
+#     with pytest.raises(OperationFailedException) as excinfo:
+#         runner.invoke(annif.cli.cli, ["download"])
+#     print("fsafafaafafd")
+#     assert "Repository Not Found for url:" in str(excinfo.value)
+
+
+# @mock.patch("huggingface_hub.HfApi.upload_file")
+# def test_tmpupload(upload_file):
+#     # assert huggingface_hub.HfApi.upload_file.call_count == 3
+#     # call_args_list = huggingface_hub.HfApi.upload_file.call_args_list
+#     # call_args_list[0]
+
+#     from unittest.mock import ANY
+
+#     huggingface_hub.HfApi.upload_file.assert_called_with(
+#         path_or_fileobj=ANY,
+#         path_in_repo=ANY,
+#         repo_id="dummy-repo",
+#         token=None,
+#         commit_message=ANY,
+#     )
+
+
+# @mock.patch("huggingface_hub.HfApi.upload_file")
+# def test_upload_to_hf_hub(upload_file):
+#     cli_util.upload_to_hf_hub(fileobj, filename, repo_id, token, commit_message)
+#     huggingface_hub.HfApi.upload_file.assert_called_once_with(
+#         # path_or_fileobj=,
+#         path_in_repo=ANY,
+#         repo_id="dummy-repo",
+#         token=None,
+#         commit_message=ANY,
+#     )
+#     assert 0
+
+
+def test_unzip_initial():
+    project_dir = os.path.join("data", "projects", "dummy-fi")
+    project_file = os.path.join(project_dir, "file.txt")
+    if os.path.exists(project_dir):
+        shutil.rmtree(project_dir, ignore_errors=True)
+    annif.cli_util.unzip(os.path.join("tests", "dummy-fi.zip"), force=False)
+    assert os.path.exists(project_dir)
+    assert os.path.exists(project_file)
+    assert os.path.getmtime(project_file) == 315525600.0  # 1980-01-01 00:00:00.00 +0200
+    assert os.path.getsize(project_file) == 0
+
+
+def test_unzip_existing_no_overwrite():
+    project_dir = os.path.join("data", "projects", "dummy-fi")
+    project_file = os.path.join(project_dir, "file.txt")
+    if os.path.exists(project_dir):
+        shutil.rmtree(project_dir, ignore_errors=True)
+        os.mkdir(project_dir)
+    with open(project_file, "wt") as pf:
+        print("Existing content", file=pf)
+
+    annif.cli_util.unzip(os.path.join("tests", "dummy-fi.zip"), force=False)
+    assert os.path.exists(project_dir)
+    assert os.path.exists(project_file)
+    assert abs(os.path.getmtime(project_file) - datetime.now().timestamp()) < 1
+    assert os.path.getsize(project_file) == 17
+
+
+def test_unzip_existing_overwrite():
+    project_dir = os.path.join("data", "projects", "dummy-fi")
+    project_file = os.path.join(project_dir, "file.txt")
+    if os.path.exists(project_dir):
+        shutil.rmtree(project_dir, ignore_errors=True)
+        os.mkdir(project_dir)
+    with open(project_file, "wt") as pf:
+        print("Existing content", file=pf)
+
+    annif.cli_util.unzip(os.path.join("tests", "dummy-fi.zip"), force=True)
+    assert os.path.exists(project_dir)
+    assert os.path.exists(project_file)
+    assert os.path.getmtime(project_file) == 315525600.0  # 1980-01-01 00:00:00.00 +0200
+    assert os.path.getsize(project_file) == 0
+
+
+##
+def test_move_project_config_initial():
+    config_dir = "projects.d"
+    config_file = os.path.join(config_dir, "dummy-fi.cfg")
+    if os.path.isfile(config_file):
+        os.remove(config_file)
+    annif.cli_util.move_project_config(
+        os.path.join("tests", "dummy-fi.cfg"), force=False
+    )
+    assert os.path.exists(config_dir)
+    assert os.path.exists(config_file)
+    assert os.path.getsize(config_file) == 119
+
+
+def test_move_project_config_existing_no_overwrite():
+    config_dir = "projects.d"
+    config_file = os.path.join(config_dir, "dummy-fi.cfg")
+    if os.path.isfile(config_file):
+        os.remove(config_file)
+
+    with open(config_file, "wt") as pf:
+        print("Existing content", file=pf)
+
+    annif.cli_util.move_project_config(
+        os.path.join("tests", "dummy-fi.cfg"), force=False
+    )
+    assert os.path.exists(config_dir)
+    assert os.path.exists(config_file)
+    assert os.path.getsize(config_file) == 17
+
+
+def test_move_project_config_existing_overwrite():
+    config_dir = "projects.d"
+    config_file = os.path.join(config_dir, "dummy-fi.cfg")
+    if os.path.isfile(config_file):
+        os.remove(config_file)
+
+    with open(config_file, "wt") as pf:
+        print("Existing content", file=pf)
+
+    annif.cli_util.move_project_config(
+        os.path.join("tests", "dummy-fi.cfg"), force=True
+    )
+    assert os.path.exists(config_dir)
+    assert os.path.exists(config_file)
+    assert os.path.getsize(config_file) == 119
 
 
 def test_completion_script_generation():
