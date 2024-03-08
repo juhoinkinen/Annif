@@ -1134,7 +1134,7 @@ def test_archive_dir(testdatadir):
     open(os.path.join(str(dirpath), "foo.txt"), "a").close()
     open(os.path.join(str(dirpath), "-train.txt"), "a").close()
 
-    fobj = annif.cli_util.archive_dir(dirpath)
+    fobj = annif.cli_util._archive_dir(dirpath)
     assert isinstance(fobj, io.BufferedRandom)
 
     with zipfile.ZipFile(fobj, mode="r") as zfile:
@@ -1143,8 +1143,8 @@ def test_archive_dir(testdatadir):
     assert os.path.split(archived_files[0])[1] == "foo.txt"
 
 
-def test_write_config(app_project):
-    result = annif.cli_util.write_config(app_project)
+def test_get_project_config(app_project):
+    result = annif.cli_util._get_project_config(app_project)
     assert isinstance(result, io.BytesIO)
     string_result = result.read().decode("UTF-8")
     assert "[dummy-en]" in string_result

@@ -240,6 +240,35 @@ def generate_filter_params(filter_batch_max_limit: int) -> list[tuple[int, float
     return list(itertools.product(limits, thresholds))
 
 
+def get_matching_projects(pattern):
+    """
+    Get projects that match the given pattern.
+    """
+    return [
+        proj
+        for proj in annif.registry.get_projects(min_access=Access.private).values()
+        if fnmatch(proj.project_id, pattern)
+    ]
+
+
+def upload_datadir(data_dir, repo_id, token, commit_message):
+    """
+    Upload a data directory to HuggingFace Hub.
+    """
+    zip_path = data_dir.split(os.path.sep, 1)[1] + ".zip"
+    with _archive_dir(data_dir) as fobj:
+        _upload_to_hf_hub(fobj, zip_path, repo_id, token, commit_message)
+
+
+def upload_config(project, repo_id, token, commit_message):
+    """
+    Upload a project configuration to HuggingFace Hub.
+    """
+    config_repo_path = project.project_id + ".cfg"
+    with _get_project_config(project) as fobj:
+        _upload_to_hf_hub(fobj, config_repo_path, repo_id, token, commit_message)
+
+
 def _is_train_file(fname):
     train_file_patterns = ("-train", "tmp-")
     for pat in train_file_patterns:
@@ -248,7 +277,7 @@ def _is_train_file(fname):
     return False
 
 
-def archive_dir(data_dir):
+def _archive_dir(data_dir):
     fp = tempfile.TemporaryFile()
     path = pathlib.Path(data_dir)
     fpaths = [fpath for fpath in path.glob("**/*") if not _is_train_file(fpath.name)]
@@ -265,7 +294,7 @@ def archive_dir(data_dir):
     return fp
 
 
-def write_config(project):
+def _get_project_config(project):
     fp = tempfile.TemporaryFile(mode="w+t")
     config = configparser.ConfigParser()
     config[project.project_id] = project.config
@@ -275,7 +304,7 @@ def write_config(project):
     return io.BytesIO(fp.read().encode("utf8"))
 
 
-def upload_to_hf_hub(fileobj, filename, repo_id, token, commit_message):
+def _upload_to_hf_hub(fileobj, filename, repo_id, token, commit_message):
     from huggingface_hub import HfApi
     from huggingface_hub.utils import HfHubHTTPError, HFValidationError
 
@@ -292,7 +321,7 @@ def upload_to_hf_hub(fileobj, filename, repo_id, token, commit_message):
         raise OperationFailedException(str(err))
 
 
-def get_selected_project_ids_from_hf_hub(project_ids_pattern, repo_id, token, revision):
+def get_matching_project_ids_from_hf_hub(project_ids_pattern, repo_id, token, revision):
     all_repo_file_paths = _list_files_in_hf_hub(repo_id, token, revision)
     return [
         path.rsplit(".zip")[0].split("projects/")[1]
@@ -334,9 +363,9 @@ def download_from_hf_hub(filename, repo_id, token, revision):
 def unzip(src_path, force):
     datadir = current_app.config["DATADIR"]
     with zipfile.ZipFile(src_path, "r") as zfile:
+        archive_comment = str(zfile.comment, encoding="utf-8")
         logger.debug(
-            f"Extracting archive {src_path}; archive comment: "
-            f"\"{str(zfile.comment, encoding='utf-8')}\""
+            f'Extracting archive {src_path}; archive comment: "{archive_comment}"'
         )
         for member in zfile.infolist():
             dest_path = os.path.join(datadir, member.filename)
@@ -346,13 +375,20 @@ def unzip(src_path, force):
                 else:
                     click.echo(f"Not overwriting {dest_path} (use --force to override)")
             else:
-                logger.debug(f"Unzipping to {dest_path}")
-                zfile.extract(member, path=datadir)
-                date_time = time.mktime(member.date_time + (0, 0, -1))
-                os.utime(dest_path, (date_time, date_time))
+                _unzip_member(zfile, member, dest_path, datadir)
+
+
+def _unzip_member(zfile, member, dest_path, datadir):
+    logger.debug(f"Unzipping to {dest_path}")
+    zfile.extract(member, path=datadir)
+    date_time = time.mktime(member.date_time + (0, 0, -1))
+    os.utime(dest_path, (date_time, date_time))
 
 
 def move_project_config(src_path, force):
+    if not os.path.isdir("projects.d"):
+        os.mkdir("projects.d")
+
     dest_path = os.path.join("projects.d", os.path.basename(src_path))
     if os.path.exists(dest_path) and not force:
         if _compute_crc32(dest_path) == _compute_crc32(src_path):
