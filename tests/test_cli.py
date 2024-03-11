@@ -1169,9 +1169,9 @@ def hf_hub_download_mock_side_effect(filename, repo_id, token, revision):
     "huggingface_hub.hf_hub_download",
     side_effect=hf_hub_download_mock_side_effect,
 )
-@mock.patch("annif.cli_util.move_project_config")
+@mock.patch("annif.cli_util.copy_project_config")
 def test_download_dummy_fi(
-    move_project_config, hf_hub_download, list_repo_files, testdatadir
+    copy_project_config, hf_hub_download, list_repo_files, testdatadir
 ):
     result = runner.invoke(
         annif.cli.cli,
@@ -1207,7 +1207,7 @@ def test_download_dummy_fi(
     dirpath = os.path.join(str(testdatadir), "projects", "dummy-fi")
     fpath = os.path.join(str(dirpath), "file.txt")
     assert os.path.exists(fpath)
-    assert move_project_config.call_args_list == [
+    assert copy_project_config.call_args_list == [
         mock.call("tests/huggingface-cache/dummy-fi.cfg", False)
     ]
 
@@ -1227,9 +1227,9 @@ def test_download_dummy_fi(
     "huggingface_hub.hf_hub_download",
     side_effect=hf_hub_download_mock_side_effect,
 )
-@mock.patch("annif.cli_util.move_project_config")
+@mock.patch("annif.cli_util.copy_project_config")
 def test_download_dummy_fi_and_en(
-    move_project_config, hf_hub_download, list_repo_files, testdatadir
+    copy_project_config, hf_hub_download, list_repo_files, testdatadir
 ):
     result = runner.invoke(
         annif.cli.cli,
@@ -1280,7 +1280,7 @@ def test_download_dummy_fi_and_en(
     dirpath_en = os.path.join(str(testdatadir), "projects", "dummy-en")
     fpath_en = os.path.join(str(dirpath_en), "file.txt")
     assert os.path.exists(fpath_en)
-    assert move_project_config.call_args_list == [
+    assert copy_project_config.call_args_list == [
         mock.call("tests/huggingface-cache/dummy-fi.cfg", False),
         mock.call("tests/huggingface-cache/dummy-en.cfg", False),
     ]
@@ -1396,8 +1396,8 @@ def test_unzip_overwrite(testdatadir):
 @mock.patch("os.path.exists", return_value=True)
 @mock.patch("annif.cli_util._compute_crc32", return_value=0)
 @mock.patch("shutil.copy")
-def test_move_project_config_no_overwrite(copy, _compute_crc32, exists):
-    annif.cli_util.move_project_config(
+def test_copy_project_config_no_overwrite(copy, _compute_crc32, exists):
+    annif.cli_util.copy_project_config(
         os.path.join("tests", "huggingface-cache", "dummy-fi.cfg"), force=False
     )
     assert not copy.called
@@ -1405,8 +1405,8 @@ def test_move_project_config_no_overwrite(copy, _compute_crc32, exists):
 
 @mock.patch("os.path.exists", return_value=True)
 @mock.patch("shutil.copy")
-def test_move_project_config_overwrite(copy, exists):
-    annif.cli_util.move_project_config(
+def test_copy_project_config_overwrite(copy, exists):
+    annif.cli_util.copy_project_config(
         os.path.join("tests", "huggingface-cache", "dummy-fi.cfg"), force=True
     )
     assert copy.called

@@ -385,7 +385,7 @@ def _unzip_member(zfile, member, dest_path, datadir):
     os.utime(dest_path, (date_time, date_time))
 
 
-def move_project_config(src_path, force):
+def copy_project_config(src_path, force):
     if not os.path.isdir("projects.d"):
         os.mkdir("projects.d")
 
@@ -393,12 +393,12 @@ def move_project_config(src_path, force):
     if os.path.exists(dest_path) and not force:
         if _compute_crc32(dest_path) == _compute_crc32(src_path):
             logger.debug(
-                f"Skipping move of {os.path.basename(src_path)}; already in place"
+                f"Skipping copy of {os.path.basename(src_path)}; already in place"
             )
         else:
             click.echo(f"Not overwriting {dest_path} (use --force to override)")
     else:
-        logger.debug(f"Moving to {dest_path}")
+        logger.debug(f"Copying to {dest_path}")
         shutil.copy(src_path, dest_path)
 
 
