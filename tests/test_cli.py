@@ -1343,10 +1343,10 @@ def test_download_hf_hub_download_failed(
     assert hf_hub_download.called
 
 
-def test_unzip_initial(testdatadir):
+def test_unzip_archive_initial(testdatadir):
     dirpath = os.path.join(str(testdatadir), "projects", "dummy-fi")
     fpath = os.path.join(str(dirpath), "file.txt")
-    annif.cli_util.unzip(
+    annif.cli_util.unzip_archive(
         os.path.join("tests", "huggingface-cache", "projects", "dummy-fi.zip"),
         force=False,
     )
@@ -1358,14 +1358,14 @@ def test_unzip_initial(testdatadir):
     ).astimezone(tz=timezone.utc)
 
 
-def test_unzip_no_overwrite(testdatadir):
+def test_unzip_archive_no_overwrite(testdatadir):
     dirpath = os.path.join(str(testdatadir), "projects", "dummy-fi")
     fpath = os.path.join(str(dirpath), "file.txt")
     os.makedirs(dirpath, exist_ok=True)
     with open(fpath, "wt") as pf:
         print("Existing content", file=pf)
 
-    annif.cli_util.unzip(
+    annif.cli_util.unzip_archive(
         os.path.join("tests", "huggingface-cache", "projects", "dummy-fi.zip"),
         force=False,
     )
@@ -1374,14 +1374,14 @@ def test_unzip_no_overwrite(testdatadir):
     assert datetime.now().timestamp() - os.path.getmtime(fpath) < 1
 
 
-def test_unzip_overwrite(testdatadir):
+def test_unzip_archive_overwrite(testdatadir):
     dirpath = os.path.join(str(testdatadir), "projects", "dummy-fi")
     fpath = os.path.join(str(dirpath), "file.txt")
     os.makedirs(dirpath, exist_ok=True)
     with open(fpath, "wt") as pf:
         print("Existing content", file=pf)
 
-    annif.cli_util.unzip(
+    annif.cli_util.unzip_archive(
         os.path.join("tests", "huggingface-cache", "projects", "dummy-fi.zip"),
         force=True,
     )

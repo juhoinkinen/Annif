@@ -360,7 +360,7 @@ def download_from_hf_hub(filename, repo_id, token, revision):
         raise OperationFailedException(str(err))
 
 
-def unzip(src_path, force):
+def unzip_archive(src_path, force):
     datadir = current_app.config["DATADIR"]
     with zipfile.ZipFile(src_path, "r") as zfile:
         archive_comment = str(zfile.comment, encoding="utf-8")
@@ -368,33 +368,41 @@ def unzip(src_path, force):
             f'Extracting archive {src_path}; archive comment: "{archive_comment}"'
         )
         for member in zfile.infolist():
-            dest_path = os.path.join(datadir, member.filename)
-            if os.path.exists(dest_path) and not force:
-                if _are_identical(member, dest_path):
-                    logger.debug(f"Skipping unzip to {dest_path}; already in place")
-                else:
-                    click.echo(f"Not overwriting {dest_path} (use --force to override)")
-            else:
-                _unzip_member(zfile, member, dest_path, datadir)
+            _unzip_member(zfile, member, datadir, force)
 
 
-def _unzip_member(zfile, member, dest_path, datadir):
-    logger.debug(f"Unzipping to {dest_path}")
-    zfile.extract(member, path=datadir)
+def _unzip_member(zfile, member, datadir, force):
+    dest_path = os.path.join(datadir, member.filename)
+    if os.path.exists(dest_path) and not force:
+        if _are_identical_member_and_file(member, dest_path):
+            logger.debug(f"Skipping unzip to {dest_path}; already in place")
+        else:
+            click.echo(f"Not overwriting {dest_path} (use --force to override)")
+    else:
+        logger.debug(f"Unzipping to {dest_path}")
+        zfile.extract(member, path=datadir)
+        _restore_timestamps(member, dest_path)
+
+
+def _are_identical_member_and_file(member, dest_path):
+    path_crc = _compute_crc32(dest_path)
+    return path_crc == member.CRC
+
+
+def _restore_timestamps(member, dest_path):
     date_time = time.mktime(member.date_time + (0, 0, -1))
     os.utime(dest_path, (date_time, date_time))
 
 
 def copy_project_config(src_path, force):
-    if not os.path.isdir("projects.d"):
-        os.mkdir("projects.d")
+    project_configs_dest_dir = "projects.d"
+    if not os.path.isdir(project_configs_dest_dir):
+        os.mkdir(project_configs_dest_dir)
 
-    dest_path = os.path.join("projects.d", os.path.basename(src_path))
+    dest_path = os.path.join(project_configs_dest_dir, os.path.basename(src_path))
     if os.path.exists(dest_path) and not force:
-        if _compute_crc32(dest_path) == _compute_crc32(src_path):
-            logger.debug(
-                f"Skipping copy of {os.path.basename(src_path)}; already in place"
-            )
+        if _are_identical_files(src_path, dest_path):
+            logger.debug(f"Skipping copy to {dest_path}; already in place")
         else:
             click.echo(f"Not overwriting {dest_path} (use --force to override)")
     else:
@@ -402,9 +410,10 @@ def copy_project_config(src_path, force):
         shutil.copy(src_path, dest_path)
 
 
-def _are_identical(member, dest_path):
-    path_crc = _compute_crc32(dest_path)
-    return path_crc == member.CRC
+def _are_identical_files(src_path, dest_path):
+    src_crc32 = _compute_crc32(src_path)
+    dest_crc32 = _compute_crc32(dest_path)
+    return src_crc32 == dest_crc32
 
 
 def _compute_crc32(path):
@@ -419,7 +428,7 @@ def _compute_crc32(path):
     return crcval
 
 
-def get_vocab_id(config_path):
+def get_vocab_id_from_config(config_path):
     config = configparser.ConfigParser()
     config.read(config_path)
     section = config.sections()[0]

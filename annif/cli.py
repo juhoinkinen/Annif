@@ -666,21 +666,21 @@ def run_download(project_ids_pattern, repo_id, token, revision, force):
 
     vocab_ids = set()
     for project_id in project_ids:
-        project_zip_local_cache_path = cli_util.download_from_hf_hub(
+        project_zip_cache_path = cli_util.download_from_hf_hub(
             f"projects/{project_id}.zip", repo_id, token, revision
         )
-        cli_util.unzip(project_zip_local_cache_path, force)
-        local_config_cache_path = cli_util.download_from_hf_hub(
+        cli_util.unzip_archive(project_zip_cache_path, force)
+        config_file_cache_path = cli_util.download_from_hf_hub(
             f"{project_id}.cfg", repo_id, token, revision
         )
-        vocab_ids.add(cli_util.get_vocab_id(local_config_cache_path))
-        cli_util.copy_project_config(local_config_cache_path, force)
+        vocab_ids.add(cli_util.get_vocab_id_from_config(config_file_cache_path))
+        cli_util.copy_project_config(config_file_cache_path, force)
 
     for vocab_id in vocab_ids:
-        vocab_zip_local_cache_path = cli_util.download_from_hf_hub(
+        vocab_zip_cache_path = cli_util.download_from_hf_hub(
             f"vocabs/{vocab_id}.zip", repo_id, token, revision
         )
-        cli_util.unzip(vocab_zip_local_cache_path, force)
+        cli_util.unzip_archive(vocab_zip_cache_path, force)
 
 
 @cli.command("completion")
