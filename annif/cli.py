@@ -582,6 +582,107 @@ def run_hyperopt(project_id, paths, docs_limit, trials, jobs, metric, results_fi
     click.echo("---")
 
 
+@cli.command("upload")
+@click.argument("project_ids_pattern")
+@click.argument("repo_id")
+@click.option(
+    "--token",
+    help="""Authentication token, obtained from the Hugging Face Hub.
+    Will default to the stored token.""",
+)
+@click.option(
+    "--commit-message",
+    help="""The summary / title / first line of the generated commit.""",
+)
+@cli_util.common_options
+def run_upload(project_ids_pattern, repo_id, token, commit_message):
+    """
+    Upload selected projects and their vocabularies to a Hugging Face Hub repository
+    \f
+    This command zips the project directories and vocabularies of the projects
+    that match the given `project_ids_pattern`, and uploads the archives along
+    with the projects configuration to the specified Hugging Face Hub repository.
+    An authentication token and commit message can be given with options.
+    """
+    projects = cli_util.get_matching_projects(project_ids_pattern)
+    click.echo(f"Uploading project(s): {', '.join([p.project_id for p in projects])}")
+
+    commit_message = (
+        commit_message
+        if commit_message is not None
+        else f"Upload project(s) {project_ids_pattern} with Annif"
+    )
+
+    project_dirs = {p.datadir for p in projects}
+    vocab_dirs = {p.vocab.datadir for p in projects}
+    data_dirs = project_dirs.union(vocab_dirs)
+
+    for data_dir in data_dirs:
+        cli_util.upload_datadir(data_dir, repo_id, token, commit_message)
+
+    for project in projects:
+        cli_util.upload_config(project, repo_id, token, commit_message)
+
+
+@cli.command("download")
+@click.argument("project_ids_pattern")
+@click.argument("repo_id")
+@click.option(
+    "--token",
+    help="""Authentication token, obtained from the Hugging Face Hub.
+    Will default to the stored token.""",
+)
+@click.option(
+    "--revision",
+    help="""
+    An optional Git revision id which can be a branch name, a tag, or a commit
+    hash.
+    """,
+)
+@click.option(
+    "--force",
+    "-f",
+    default=False,
+    is_flag=True,
+    help="Replace an existing project/vocabulary/config with the downloaded one",
+)
+@cli_util.common_options
+def run_download(project_ids_pattern, repo_id, token, revision, force):
+    """
+    Download selected projects and their vocabularies from a Hugging Face Hub repository
+    \f
+    This command downloads the project and vocabulary archives and the
+    configuration files of the projects that match the given
+    `project_ids_pattern` from the specified Hugging Face Hub repository and
+    unzips the archives to `data/` directory and places the configuration files
+    to `projects.d/` directory. An authentication token and revision can
+    be given with options.
+    """
+
+    project_ids = cli_util.get_matching_project_ids_from_hf_hub(
+        project_ids_pattern, repo_id, token, revision
+    )
+    click.echo(f"Downloading project(s): {', '.join(project_ids)}")
+
+    vocab_ids = set()
+    for project_id in project_ids:
+        project_zip_cache_path = cli_util.download_from_hf_hub(
+            f"projects/{project_id}.zip", repo_id, token, revision
+        )
+        cli_util.unzip_archive(project_zip_cache_path, force)
+        config_file_cache_path = cli_util.download_from_hf_hub(
+            f"{project_id}.cfg", repo_id, token, revision
+        )
+        vocab_ids.add(cli_util.get_vocab_id_from_config(config_file_cache_path))
+        cli_util.copy_project_config(config_file_cache_path, force)
+
+    for vocab_id in vocab_ids:
+        vocab_zip_cache_path = cli_util.download_from_hf_hub(
+            f"vocabs/{vocab_id}.zip", repo_id, token, revision
+        )
+        cli_util.unzip_archive(vocab_zip_cache_path, force)
+
+
 @cli.command("completion")
 @click.option("--bash", "shell", flag_value="bash")
 @click.option("--zsh", "shell", flag_value="zsh")

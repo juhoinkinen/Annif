@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+import binascii
 import collections
+import configparser
+import importlib
+import io
 import itertools
 import os
+import pathlib
+import shutil
 import sys
+import tempfile
+import time
+import zipfile
+from fnmatch import fnmatch
 from typing import TYPE_CHECKING
 
 import click
@@ -13,12 +23,11 @@ import click_log
 from flask import current_app
 
 import annif
-from annif.exception import ConfigurationException
+from annif.exception import ConfigurationException, OperationFailedException
 from annif.project import Access
 
 if TYPE_CHECKING:
     from datetime import datetime
-    from io import TextIOWrapper
 
     from click.core import Argument, Context, Option
 
@@ -185,7 +194,7 @@ def show_hits(
     hits: SuggestionResult,
     project: AnnifProject,
     lang: str,
-    file: TextIOWrapper | None = None,
+    file: io.TextIOWrapper | None = None,
 ) -> None:
     """
     Print subject suggestions to the console or a file. The suggestions are displayed as
@@ -229,6 +238,201 @@ def generate_filter_params(filter_batch_max_limit: int) -> list[tuple[int, float
     limits = range(1, filter_batch_max_limit + 1)
     thresholds = [i * 0.05 for i in range(20)]
     return list(itertools.product(limits, thresholds))
+
+
+def get_matching_projects(pattern):
+    """
+    Get projects that match the given pattern.
+    """
+    return [
+        proj
+        for proj in annif.registry.get_projects(min_access=Access.private).values()
+        if fnmatch(proj.project_id, pattern)
+    ]
+
+
+def upload_datadir(data_dir, repo_id, token, commit_message):
+    """
+    Upload a data directory to HuggingFace Hub.
+    """
+    zip_path = data_dir.split(os.path.sep, 1)[1] + ".zip"
+    with _archive_dir(data_dir) as fobj:
+        _upload_to_hf_hub(fobj, zip_path, repo_id, token, commit_message)
+
+
+def upload_config(project, repo_id, token, commit_message):
+    """
+    Upload a project configuration to HuggingFace Hub.
+    """
+    config_repo_path = project.project_id + ".cfg"
+    with _get_project_config(project) as fobj:
+        _upload_to_hf_hub(fobj, config_repo_path, repo_id, token, commit_message)
+
+
+def _is_train_file(fname):
+    train_file_patterns = ("-train", "tmp-")
+    for pat in train_file_patterns:
+        if pat in fname:
+            return True
+    return False
+
+
+def _archive_dir(data_dir):
+    fp = tempfile.TemporaryFile()
+    path = pathlib.Path(data_dir)
+    fpaths = [fpath for fpath in path.glob("**/*") if not _is_train_file(fpath.name)]
+    with zipfile.ZipFile(fp, mode="w") as zfile:
+        zfile.comment = bytes(
+            f"Archived by Annif {importlib.metadata.version('annif')}",
+            encoding="utf-8",
+        )
+        for fpath in fpaths:
+            logger.debug(f"Adding {fpath}")
+            arcname = os.path.join(*fpath.parts[1:])
+            zfile.write(fpath, arcname=arcname)
+    fp.seek(0)
+    return fp
+
+
+def _get_project_config(project):
+    fp = tempfile.TemporaryFile(mode="w+t")
+    config = configparser.ConfigParser()
+    config[project.project_id] = project.config
+    config.write(fp)  # This needs tempfile in text mode
+    fp.seek(0)
+    # But for upload fobj needs to be in binary mode
+    return io.BytesIO(fp.read().encode("utf8"))
+
+
+def _upload_to_hf_hub(fileobj, filename, repo_id, token, commit_message):
+    from huggingface_hub import HfApi
+    from huggingface_hub.utils import HfHubHTTPError, HFValidationError
+
+    api = HfApi()
+    try:
+        api.upload_file(
+            path_or_fileobj=fileobj,
+            path_in_repo=filename,
+            repo_id=repo_id,
+            token=token,
+            commit_message=commit_message,
+        )
+    except (HfHubHTTPError, HFValidationError) as err:
+        raise OperationFailedException(str(err))
+
+
+def get_matching_project_ids_from_hf_hub(project_ids_pattern, repo_id, token, revision):
+    all_repo_file_paths = _list_files_in_hf_hub(repo_id, token, revision)
+    return [
+        path.rsplit(".zip")[0].split("projects/")[1]
+        for path in all_repo_file_paths
+        if fnmatch(path, f"projects/{project_ids_pattern}.zip")
+    ]
+
+
+def _list_files_in_hf_hub(repo_id, token, revision):
+    from huggingface_hub import list_repo_files
+    from huggingface_hub.utils import HfHubHTTPError, HFValidationError
+
+    try:
+        return [
+            repofile
+            for repofile in list_repo_files(
+                repo_id=repo_id, token=token, revision=revision
+            )
+        ]
+    except (HfHubHTTPError, HFValidationError) as err:
+        raise OperationFailedException(str(err))
+
+
+def download_from_hf_hub(filename, repo_id, token, revision):
+    from huggingface_hub import hf_hub_download
+    from huggingface_hub.utils import HfHubHTTPError, HFValidationError
+
+    try:
+        return hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            token=token,
+            revision=revision,
+        )
+    except (HfHubHTTPError, HFValidationError) as err:
+        raise OperationFailedException(str(err))
+
+
+def unzip_archive(src_path, force):
+    datadir = current_app.config["DATADIR"]
+    with zipfile.ZipFile(src_path, "r") as zfile:
+        archive_comment = str(zfile.comment, encoding="utf-8")
+        logger.debug(
+            f'Extracting archive {src_path}; archive comment: "{archive_comment}"'
+        )
+        for member in zfile.infolist():
+            _unzip_member(zfile, member, datadir, force)
+
+
+def _unzip_member(zfile, member, datadir, force):
+    dest_path = os.path.join(datadir, member.filename)
+    if os.path.exists(dest_path) and not force:
+        if _are_identical_member_and_file(member, dest_path):
+            logger.debug(f"Skipping unzip to {dest_path}; already in place")
+        else:
+            click.echo(f"Not overwriting {dest_path} (use --force to override)")
+    else:
+        logger.debug(f"Unzipping to {dest_path}")
+        zfile.extract(member, path=datadir)
+        _restore_timestamps(member, dest_path)
+
+
+def _are_identical_member_and_file(member, dest_path):
+    path_crc = _compute_crc32(dest_path)
+    return path_crc == member.CRC
+
+
+def _restore_timestamps(member, dest_path):
+    date_time = time.mktime(member.date_time + (0, 0, -1))
+    os.utime(dest_path, (date_time, date_time))
+
+
+def copy_project_config(src_path, force):
+    project_configs_dest_dir = "projects.d"
+    if not os.path.isdir(project_configs_dest_dir):
+        os.mkdir(project_configs_dest_dir)
+
+    dest_path = os.path.join(project_configs_dest_dir, os.path.basename(src_path))
+    if os.path.exists(dest_path) and not force:
+        if _are_identical_files(src_path, dest_path):
+            logger.debug(f"Skipping copy to {dest_path}; already in place")
+        else:
+            click.echo(f"Not overwriting {dest_path} (use --force to override)")
+    else:
+        logger.debug(f"Copying to {dest_path}")
+        shutil.copy(src_path, dest_path)
+
+
+def _are_identical_files(src_path, dest_path):
+    src_crc32 = _compute_crc32(src_path)
+    dest_crc32 = _compute_crc32(dest_path)
+    return src_crc32 == dest_crc32
+
+
+def _compute_crc32(path):
+    if os.path.isdir(path):
+        return 0
+
+    size = 1024 * 1024 * 10  # 10 MiB chunks
+    with open(path, "rb") as fp:
+        crcval = 0
+        while chunk := fp.read(size):
+            crcval = binascii.crc32(chunk, crcval)
+    return crcval
+
+
+def get_vocab_id_from_config(config_path):
+    config = configparser.ConfigParser()
+    config.read(config_path)
+    section = config.sections()[0]
+    return config[section]["vocab"]
 
 
 def _get_completion_choices(
