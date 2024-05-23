@@ -14,6 +14,8 @@
 [![docs](https://readthedocs.org/projects/annif/badge/?version=latest)](https://annif.readthedocs.io/en/latest/index.html)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+Dummy change to get a new PR.
+
 Annif is an automated subject indexing toolkit. It was originally created as
 a statistical automated indexing tool that used metadata from the
 [Finna.fi](https://finna.fi) discovery interface as a training corpus.
