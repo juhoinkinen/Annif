@@ -194,7 +194,9 @@ jobs:
     # needs: [lint, test, test-docker-image]
     runs-on: ubuntu-22.04
     if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-    environment: testpypi  # use 'pypi' for real releases
+    environment:
+      name: testpypi  # use 'pypi' for real releases
+      url: https://test.pypi.org/project/annif-test-pypi/  # use https://pypi.org/project/annif/ for real releases
     permissions:
       id-token: write
     steps:
