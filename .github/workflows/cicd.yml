@@ -194,6 +194,9 @@ jobs:
     needs: [lint, test, test-docker-image]
     runs-on: ubuntu-22.04
     if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+    environment: testpypi  # use 'pypi' for real releases
+    permissions:
+      id-token: write
     steps:
     - name: Harden the runner (Audit all outbound calls)
       uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
@@ -211,7 +214,11 @@ jobs:
         POETRY_HTTP_BASIC_PYPI_USERNAME: __token__
         POETRY_HTTP_BASIC_PYPI_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
-        poetry publish --build
+        poetry build
+    - name: Publish package distributions to PyPI
+      uses: pypa/gh-action-pypi-publish@release/ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+      with:
+        repository-url: https://test.pypi.org/legacy/  # remove for real releases
 
     - name: Login to Quay.io
       uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1  # v3.5.0

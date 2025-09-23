@@ -1,5 +1,5 @@
 [project]
-name = "annif"
+name = "annif-test-pypi"
 version = "1.5.0-dev"
 description = "Automated subject indexing and classification tool"
 license = "Apache-2.0"
