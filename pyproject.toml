@@ -1,6 +1,6 @@
 [project]
-name = "annif"
-version = "1.5.0-dev"
+name = "annif-test-pypi"
+version = "1.5.0-dev-1"
 description = "Automated subject indexing and classification tool"
 license = "Apache-2.0"
 readme = "README.md"
@@ -91,3 +91,8 @@ skip_gitignore = true
 [tool.pytest.ini_options]
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 addopts = "-m 'not slow'"
+
+[tool.poetry]
+packages = [
+    {include = "annif"}
+]
