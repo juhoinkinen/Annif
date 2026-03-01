@@ -10,12 +10,12 @@ jobs:
     timeout-minutes: 15
     steps:
     - name: Harden the runner (Audit all outbound calls)
-      uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+      uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
       with:
         egress-policy: audit
 
     - name: "Build for testing"
-      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
       with:
         push: false
         tags: test-image
@@ -23,14 +23,14 @@ jobs:
       run: |
         docker run --rm --workdir /Annif test-image pytest -p no:cacheprovider
     - name: Login to Quay.io
-      uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1  # v3.5.0
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
       with:
         registry: quay.io
         username: ${{ secrets.YHTEENTOIMIVUUSPALVELUT_QUAY_IO_USERNAME }}
         password: ${{ secrets.YHTEENTOIMIVUUSPALVELUT_QUAY_IO_PASSWORD }}
     - name: Docker meta
       id: meta
-      uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f  # v5.8.0
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051  # v5.10.0
       with:
         images: quay.io/natlibfi/annif
         flavor: |
@@ -40,7 +40,7 @@ jobs:
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
     - name: Build and push to Quay.io
-      uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
       with:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
